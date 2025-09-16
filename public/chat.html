@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat App</title>
+  <style>
+    body {margin:0;font-family:Arial,Helvetica,sans-serif;background:black;color:white;}
+    .chat-list,.chat-screen{display:none;height:100vh;overflow:hidden;}
+    .chat-list.active,.chat-screen.active{display:block;}
+    .chat-list-header,.chat-header{display:flex;align-items:center;padding:10px;background:#222;}
+    .chat-list-header h2{margin:0 auto;}
+    .chat-list-header button{background:#007bff;border:none;color:white;padding:6px 12px;border-radius:6px;cursor:pointer;margin-left:6px;}
+    .chat-list ul{list-style:none;margin:0;padding:0;}
+    .chat-list li{display:flex;align-items:center;padding:10px;border-bottom:1px solid #333;cursor:pointer;}
+    .chat-list img,.chat-list video{width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:10px;}
+
+    .chat-screen {display:flex;flex-direction:column;height:100vh;position:relative;}
+    .chat-header button{margin-right:10px;background:none;border:none;color:white;font-size:16px;cursor:pointer;}
+    .chat-header img,.chat-header video{width:35px;height:35px;border-radius:50%;object-fit:cover;margin-right:10px;}
+    .chat-header h3{margin:0;}
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      margin-bottom: 10px;
+    }
+    .placeholder{color:gray;font-style:italic;font-size:14px;text-align:center;margin-top:20px;}
+
+    .chat-input {
+      display:flex;
+      align-items:center;
+      padding:8px;
+      background:#111;
+      position: absolute;
+      bottom: 0;
+      width:100%;
+      box-sizing:border-box;
+      z-index: 20;
+      gap:8px;
+    }
+
+    .chat-input textarea {
+      flex:1;
+      padding:8px 12px;
+      border-radius:20px;
+      border:none;
+      outline:none;
+      font-size:14px;
+      color: white;
+      background: #0f1112;
+      resize: none;
+      min-height:36px;
+      max-height:120px;
+      overflow-y:auto;
+      line-height:1.2;
+    }
+
+    .chat-input button {
+      width:36px;
+      height:36px;
+      font-size:18px;
+      border-radius:50%;
+      background:#007bff;
+      color:white;
+      border:none;
+      cursor:pointer;
+      flex-shrink:0;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* Message bubble styles */
+    .message {
+      display: flex;
+      flex-direction: column;
+      margin: 6px;
+      max-width: 70%;
+    }
+    .bubble {
+      padding: 8px 12px;
+      border-radius: 12px;
+      word-wrap: break-word;
+    }
+    .message.sent {
+      align-self: flex-end;
+      text-align: right;
+    }
+    .message.sent .bubble {
+      background: linear-gradient(135deg, #0088cc, #00aaff);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.received {
+      align-self: flex-start;
+      text-align: left;
+    }
+    .message.received .bubble {
+      background: #2b2b2b;
+      color: #e5e5e5;
+      border-bottom-left-radius: 4px;
+    }
+    .timestamp {
+      font-size: 0.7rem;
+      color: gray;
+      margin-top: 2px;
+    }
+
+    .modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);justify-content:center;align-items:center;}
+    .modal-content{background:#222;padding:20px;border-radius:10px;width:300px;color:white;}
+    .modal-content input{width:100%;margin:10px 0;padding:8px;border-radius:5px;border:none;}
+    .preview{width:60px;height:60px;border-radius:50%;object-fit:cover;margin-top:10px;}
+
+    /* Emoji panel */
+    #emojiPanel {
+      display:none;
+      position:absolute;
+      bottom:60px;
+      left:10px;
+      right:10px;
+      background:#222;
+      padding:10px;
+      border-radius:10px;
+      width: calc(100% - 20px);
+      max-height:200px;
+      overflow-y:auto;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      z-index:30;
+      align-content:flex-start;
+      scrollbar-width: thin;
+      scrollbar-color: #555 #222;
+    }
+    #emojiPanel::-webkit-scrollbar { width:6px; height:6px; }
+    #emojiPanel::-webkit-scrollbar-thumb { background:#555; border-radius:3px; }
+    #emojiPanel::-webkit-scrollbar-track { background:#222; }
+    #emojiPanel button { border:none; background:transparent; font-size:22px; cursor:pointer; padding:0; margin:2px; }
+    #emojiPanel img { width:22px; height:22px; display:block; }
+  </style>
+</head>
+<body>
+
+<script>
+  // ✅ Check if user is logged in
+  const username = localStorage.getItem("chatUsername");
+  if (!username) {
+    alert("You must log in first.");
+    window.location.href = "login.html";
+  } else {
+    // Connect to server with saved username
+    const socket = io();
+    socket.emit("set username", username);
+  }
+
+  // ✅ Logout function
+  function logoutUser() {
+    localStorage.removeItem("chatUsername");
+    localStorage.removeItem("chatPassword");
+    window.location.href = "login.html";
+  }
+</script>
+
+<!-- Chat List -->
+<div class="chat-list active" id="chatList">
+  <div class="chat-list-header">
+    <h2>Chats</h2>
+    <button type="button" onclick="openAddModal()">＋ Add</button>
+    <button type="button" onclick="logoutUser()">🚪 Logout</button>
+  </div>
+  <ul id="userList"></ul>
+</div>
+
+<!-- Chat Screen -->
+<div class="chat-screen" id="chatScreen" style="display: none;">
+  <div class="chat-messages" id="chatMessages">
+    <div class="placeholder">Start typing...</div>
+  </div>
+</div>
+
+<!-- Add Contact Modal -->
+<div class="modal" id="addModal">
+  <div class="modal-content">
+    <h3>Add Contact</h3>
+    <input type="text" id="contactName" placeholder="Name">
+    <input type="file" id="contactMedia" accept="image/*,video/*">
+    <div id="previewContainer"></div>
+    <button type="button" onclick="saveContact()">Save</button>
+    <button type="button" onclick="closeAddModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Load Socket.IO client -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ---------- BASIC CHAT DATA ---------- */
+let users = [];
+let currentUserIndex = null;
+
+// 🔌 Connect to backend
+const socket = io();
+
+// 🆕 Use stored username
+let usernameStored = localStorage.getItem("chatUsername") || "Anonymous";
+socket.emit("set username", usernameStored);
+
+/* ---------- RENDER USER LIST ---------- */
+function renderUserList() {
+  const userList = document.getElementById("userList");
+  userList.innerHTML = "";
+  users.forEach((user, index) => {
+    const li = document.createElement("li");
+    const label = `<span style="font-weight:bold;margin-right:8px">${user.name}</span>`;
+    if (user.type === "image") {
+      li.innerHTML = `<img src="${user.media}" alt="avatar"><span>${label}</span>`;
+    } else if (user.type === "video") {
+      li.innerHTML = `<video src="${user.media}" autoplay loop muted></video><span>${label}</span>`;
+    } else {
+      li.innerHTML = `<img src="https://via.placeholder.com/40" alt="avatar"><span>${label}</span>`;
+    }
+    li.onclick = () => openChat(index);
+    userList.appendChild(li);
+  });
+}
+
+/* ---------- OPEN CHAT (join room) ---------- */
+function openChat(index) {
+  currentUserIndex = index;
+  const currentUser = users[index];
+  document.getElementById("chatList").classList.remove("active");
+  document.getElementById("chatScreen").classList.add("active");
+
+  renderMessages();
+  emojiPanel.style.display = "none";
+}
+
+function goBack() {
+  document.getElementById("chatScreen").classList.remove("active");
+  document.getElementById("chatList").classList.add("active");
+}
+
+/* ---------- RENDER MESSAGES ---------- */
+function renderMessages() {
+  const chatMessages = document.getElementById("chatMessages");
+  chatMessages.innerHTML = "";
+  if (currentUserIndex === null || !users[currentUserIndex].messages || users[currentUserIndex].messages.length === 0) {
+    chatMessages.innerHTML = `<div class="placeholder">Start typing...</div>`;
+    return;
+  }
+  users[currentUserIndex].messages.forEach((msgObj) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message " + (msgObj.type || "received");
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    if (msgObj.type === "sent") {
+      bubble.textContent = msgObj.text;
+    } else if (msgObj.username === "System") {
+      bubble.textContent = msgObj.text;
+    } else {
+      bubble.innerHTML = `<strong style="font-size:0.95rem">${msgObj.username}:</strong> ${msgObj.text}`;
+    }
+    wrapper.appendChild(bubble);
+
+    const date = new Date(msgObj.time);
+    const timeStr = isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    const timeDiv = document.createElement("div");
+    timeDiv.className = "timestamp";
+    timeDiv.textContent = timeStr;
+    wrapper.appendChild(timeDiv);
+
+    chatMessages.appendChild(wrapper);
+  });
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/* ---------- SEND MESSAGE ---------- */
+const messageInput = document.getElementById("messageInput");
+const emojiPanel = document.getElementById("emojiPanel");
+
+function sendMessage() {
+  const msg = messageInput.value.trim();
+  if (!msg) return;
+  if (currentUserIndex === null) {
+    alert("Open a chat first or add someone to chat with.");
+    return;
+  }
+
+  const roomId = users[currentUserIndex].roomId;
+  if (!roomId) {
+    alert("This contact doesn't have a room id. Recreate contact or try again.");
+    return;
+  }
+
+  const messageObj = {
+    username: usernameStored,
+    text: msg,
+    time: new Date().toISOString(),
+    roomId,
+    type: "sent",
+  };
+  users[currentUserIndex].messages.push(messageObj);
+  renderMessages();
+
+  socket.emit("chat message", { text: msg, roomId });
+
+  messageInput.value = "";
+  emojiPanel.style.display = "none";
+}
+
+/* ---------- RECEIVE CHAT HISTORY ---------- */
+socket.on("chat history", (history) => {
+  if (currentUserIndex === null) return;
+  const roomId = users[currentUserIndex].roomId;
+  if (!roomId) return;
+
+  users[currentUserIndex].messages = users[currentUserIndex].messages || [];
+
+  const existingTimes = new Set(users[currentUserIndex].messages.map(m => `${m.time}|${m.text}`));
+  history.forEach(msg => {
+    const key = `${msg.time}|${msg.text}`;
+    if (!existingTimes.has(key)) {
+      users[currentUserIndex].messages.push({
+        username: msg.username,
+        text: msg.text,
+        time: msg.time,
+        roomId: msg.roomId,
+        type: msg.username === usernameStored ? "sent" : "received"
+      });
+    }
+  });
+
+  users[currentUserIndex].messages.sort((a,b) => new Date(a.time) - new Date(b.time));
+  renderMessages();
+});
+
+/* ---------- RECEIVE MESSAGE ---------- */
+socket.on("chat message", (msg) => {
+  if (msg.username === usernameStored) return;
+
+  if (currentUserIndex !== null && users[currentUserIndex].roomId === msg.roomId) {
+    users[currentUserIndex].messages.push({
+      username: msg.username,
+      text: msg.text,
+      time: msg.time,
+      roomId: msg.roomId,
+      type: msg.username === usernameStored ? "sent" : "received"
+    });
+    renderMessages();
+  } else {
+    const idx = users.findIndex(u => u.roomId === msg.roomId);
+    if (idx !== -1) {
+      users[idx].messages = users[idx].messages || [];
+      users[idx].messages.push({
+        username: msg.username,
+        text: msg.text,
+        time: msg.time,
+        roomId: msg.roomId,
+        type: msg.username === usernameStored ? "sent" : "received"
+      });
+      renderUserList();
+    }
+  }
+});
+
+/* ---------- ENTER KEY ---------- */
+if (messageInput) {
+  messageInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  });
+}
+
+/* ---------- EMOJI TOGGLE ---------- */
+function toggleEmojiPanel() {
+  emojiPanel.style.display =
+    emojiPanel.style.display === "none" || emojiPanel.style.display === "" ? "flex" : "none";
+}
+document.addEventListener("click", function (event) {
+  if (
+    emojiPanel && !emojiPanel.contains(event.target) &&
+    document.getElementById("emojiToggle") && !document.getElementById("emojiToggle").contains(event.target)
+  ) {
+    emojiPanel.style.display = "none";
+  }
+});
+
+/* ---------- CONTACT MODAL ---------- */
+function openAddModal() {
+  document.getElementById("addModal").style.display = "flex";
+}
+function closeAddModal() {
+  document.getElementById("addModal").style.display = "none";
+  document.getElementById("contactName").value = "";
+  document.getElementById("contactMedia").value = "";
+  document.getElementById("previewContainer").innerHTML = "";
+}
+function saveContact() {
+  const name = document.getElementById("contactName").value.trim();
+  const file = document.getElementById("contactMedia").files[0];
+  if (!name) return alert("Please enter a name");
+
+  const roomId = "r-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 10000).toString(36);
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      let type = "";
+      if (file.type.startsWith("image/")) type = "image";
+      else if (file.type.startsWith("video/")) type = "video";
+      users.push({ name, media: e.target.result, type, roomId, messages: [] });
+      renderUserList();
+      closeAddModal();
+    };
+    reader.readAsDataURL(file);
+  } else {
+    users.push({ name, media: "", type: "default", roomId, messages: [] });
+    renderUserList();
+    closeAddModal();
+  }
+}
+const mediaInput = document.getElementById("contactMedia");
+if (mediaInput) {
+mediaInput.addEventListener("change", function () {
+  const file = this.files[0];
+  const previewContainer = document.getElementById("previewContainer");
+  previewContainer.innerHTML = "";
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      if (file.type.startsWith("image/")) {
+        previewContainer.innerHTML = `<img src="${e.target.result}" class="preview">`;
+      } else if (file.type.startsWith("video/")) {
+        previewContainer.innerHTML = `<video src="${e.target.result}" class="preview" autoplay loop muted></video>`;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+});
+}
+
+/* ---------- INITIAL ---------- */
+users.push({ name: "Alice", media: "", type: "default", roomId: "r-demo-alice", messages: [] });
+users.push({ name: "Bob", media: "", type: "default", roomId: "r-demo-bob", messages: [] });
+renderUserList();
+</script>
+</body>
+</html>

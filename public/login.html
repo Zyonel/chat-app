@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login - Chat App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #1c1c1c, #3a3a3a, #5a5a5a);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .login-box {
+      background: rgba(34, 34, 34, 0.9);
+      padding: 40px 30px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+      width: 100%;               /* 🔥 allow shrinking */
+      max-width: 340px;          /* 🔥 cap it at desktop size */
+      margin: 0 15px;            /* 🔥 space on small screens */
+      animation: fadeIn 0.8s ease-in-out;
+      box-sizing: border-box;    /* ensure padding stays inside */
+    }
+    .login-box h2 {
+      margin-bottom: 10px;
+      font-size: 1.8rem;
+      color: #fff;
+    }
+    .login-box p {
+      margin: 0 0 20px;
+      font-size: 0.9rem;
+      color: #aaa;
+    }
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      font-size: 1rem;
+      background: #111;
+      color: white;
+      transition: box-shadow 0.3s;
+    }
+    .login-box input:focus {
+      box-shadow: 0 0 10px #007bff;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 15px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #28a745, #00ff99);
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .login-box button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(40, 167, 69, 0.4);
+    }
+    .login-box a {
+      color: #00d4ff;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 480px) {
+    .login-box {
+      padding: 25px 20px;
+      border-radius: 12px;
+      max-width: 95%;
+    }
+    .login-box h2 {
+      font-size: 1.5rem;
+    }
+    .login-box input,
+    .login-box button {
+      font-size: 0.95rem;
+      padding: 10px;
+    }
+  }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h2>Login</h2>
+    <p>Access your account</p>
+    <input type="text" id="loginName" placeholder="Your name">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button onclick="loginUser()">Login</button>
+    <p style="margin-top:12px;">Don't have an account? 
+      <a href="index.html">Sign Up</a>
+    </p>
+  </div>
+
+  <script>
+  function loginUser() {
+    const name = document.getElementById("loginName").value.trim();
+    const password = document.getElementById("loginPassword").value;
+
+    if (!name || !password) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    // normalize username
+    const normalizedName = name.toLowerCase();
+
+    let users = JSON.parse(localStorage.getItem("chatUsers")) || {};
+
+    if (!users[normalizedName]) {
+      alert("Account does not exist, please sign up first.");
+      return;
+    }
+
+    if (users[normalizedName] !== password) {
+      alert("Incorrect password.");
+      return;
+    }
+
+    // save current session
+    localStorage.setItem("chatUsername", normalizedName);
+
+    alert("Login successful!");
+    window.location.href = "chat.html";
+  }
+</script>
+
+</body>
+</html>
