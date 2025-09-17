@@ -32,17 +32,18 @@
     .placeholder{color:gray;font-style:italic;font-size:14px;text-align:center;margin-top:20px;}
 
     .chat-input {
-      display:flex;
-      align-items:center;
-      padding:8px;
-      background:#111;
-      position: absolute;
-      bottom: 0;
-      width:100%;
-      box-sizing:border-box;
-      z-index: 20;
-      gap:8px;
+  display:flex;
+  align-items:center;
+  padding:8px;
+  background:#111;
+  position: absolute;
+  bottom: 0;
+  width:100%;
+  box-sizing:border-box;
+  z-index: 20;
+  gap:8px;
     }
+
 
     .chat-input textarea {
       flex:1;
@@ -109,7 +110,40 @@
       font-size: 0.7rem;
       color: gray;
       margin-top: 2px;
+      text-align: right;
     }
+
+    #scrollDownBtn {
+  position: absolute;
+  bottom: 70px; /* just above input bar */
+  right: 15px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  display: none; /* hidden by default */
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  z-index: 25;
+}
+
+/* New message badge */
+#newMsgCount {
+  position: absolute;
+  bottom: 105px;
+  right: 15px;
+  background: red;
+  color: white;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  display: none;
+  z-index: 26;
+}
+
 
     .modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);justify-content:center;align-items:center;}
     .modal-content{background:#222;padding:20px;border-radius:10px;width:300px;color:white;}
@@ -121,12 +155,12 @@
       display:none;
       position:absolute;
       bottom:60px;
-      left:10px;
-      right:10px;
+      left:50%;
+      transform:translateX(-50%);
       background:#222;
       padding:10px;
       border-radius:10px;
-      width: calc(100% - 20px);
+      width:320px;
       max-height:200px;
       overflow-y:auto;
       display:flex;
@@ -137,6 +171,28 @@
       scrollbar-width: thin;
       scrollbar-color: #555 #222;
     }
+    .emoji-category {
+  margin-bottom: 12px;
+}
+
+.emoji-category h4 {
+  margin: 4px 0;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.emoji-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.emoji-grid button {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+}
     #emojiPanel::-webkit-scrollbar { width:6px; height:6px; }
     #emojiPanel::-webkit-scrollbar-thumb { background:#555; border-radius:3px; }
     #emojiPanel::-webkit-scrollbar-track { background:#222; }
@@ -145,6 +201,7 @@
   </style>
 </head>
 <body>
+<script src="/socket.io/socket.io.js"></script>
 
 <script>
   // ✅ Check if user is logged in
@@ -177,11 +234,42 @@
 </div>
 
 <!-- Chat Screen -->
-<div class="chat-screen" id="chatScreen" style="display: none;">
+<div class="chat-screen" id="chatScreen">
+
+  <!-- Messages area -->
   <div class="chat-messages" id="chatMessages">
     <div class="placeholder">Start typing...</div>
   </div>
+
+  <!-- Typing bar (hidden until a chat is opened) -->
+  <div class="chat-input" id="chatInput" style="display:none;">
+    <button id="emojiToggle" type="button" onclick="toggleEmojiPanel()">😊</button>
+    <textarea id="messageInput" placeholder="Type a message..." rows="1"></textarea>
+    <button id="sendBtn" type="button" onclick="sendMessage()">➤</button>
+  </div>
+
+  <!-- Emoji panel -->
+  <div id="emojiPanel">
+    <div class="emoji-category">
+    <h4>Faces</h4>
+    <div class="emoji-grid" id="facesCategory"></div>
+  </div>
+  <div class="emoji-category">
+    <h4>Animals</h4>
+    <div class="emoji-grid" id="animalsCategory"></div>
+  </div>
+  <div class="emoji-category">
+    <h4>Food</h4>
+    <div class="emoji-grid" id="foodCategory"></div>
+  </div>
+  </div>
+
+  <!-- Scroll controls -->
+  <div id="newMsgCount">0</div>
+  <button id="scrollDownBtn">↓</button>
+
 </div>
+
 
 <!-- Add Contact Modal -->
 <div class="modal" id="addModal">
@@ -221,7 +309,7 @@ function renderUserList() {
     } else if (user.type === "video") {
       li.innerHTML = `<video src="${user.media}" autoplay loop muted></video><span>${label}</span>`;
     } else {
-      li.innerHTML = `<img src="https://via.placeholder.com/40" alt="avatar"><span>${label}</span>`;
+      li.innerHTML = `<img src="data:image/jpeg;base64,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" alt="avatar"><span>${label}</span>`;
     }
     li.onclick = () => openChat(index);
     userList.appendChild(li);
@@ -231,17 +319,28 @@ function renderUserList() {
 /* ---------- OPEN CHAT (join room) ---------- */
 function openChat(index) {
   currentUserIndex = index;
-  const currentUser = users[index];
   document.getElementById("chatList").classList.remove("active");
   document.getElementById("chatScreen").classList.add("active");
 
-  renderMessages();
-  emojiPanel.style.display = "none";
+  // show typing bar
+  document.getElementById("chatInput").style.display = "flex";
+
+  // show placeholder if no messages
+  const chatMessages = document.getElementById("chatMessages");
+  if (!users[currentUserIndex].messages || users[currentUserIndex].messages.length === 0) {
+    chatMessages.innerHTML = `<div class="placeholder">Start typing...</div>`;
+  } else {
+    renderMessages();
+  }
 }
+
+
 
 function goBack() {
   document.getElementById("chatScreen").classList.remove("active");
   document.getElementById("chatList").classList.add("active");
+
+document.getElementById("chatInput").style.display = "none";
 }
 
 /* ---------- RENDER MESSAGES ---------- */
@@ -281,6 +380,26 @@ function renderMessages() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+const chatMessages = document.getElementById("chatMessages");
+const scrollBtn = document.getElementById("scrollToBottomBtn");
+
+// Show/hide arrow when scrolling
+chatMessages.addEventListener("scroll", () => {
+  const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
+  if (nearBottom) {
+    scrollBtn.style.display = "none";
+  } else {
+    scrollBtn.style.display = "block";
+  }
+});
+
+// Scroll to bottom function
+function scrollToBottom() {
+  chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: "smooth" });
+  scrollBtn.style.display = "none";
+}
+
+
 /* ---------- SEND MESSAGE ---------- */
 const messageInput = document.getElementById("messageInput");
 const emojiPanel = document.getElementById("emojiPanel");
@@ -313,6 +432,13 @@ function sendMessage() {
 
   messageInput.value = "";
   emojiPanel.style.display = "none";
+
+  setTimeout(() => {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    unreadMessages = 0;
+    newMsgCount.style.display = "none";
+    scrollDownBtn.style.display = "none";
+  }, 50);
 }
 
 /* ---------- RECEIVE CHAT HISTORY ---------- */
@@ -354,6 +480,7 @@ socket.on("chat message", (msg) => {
       type: msg.username === usernameStored ? "sent" : "received"
     });
     renderMessages();
+    handleNewMessage();
   } else {
     const idx = users.findIndex(u => u.roomId === msg.roomId);
     if (idx !== -1) {
@@ -452,6 +579,76 @@ mediaInput.addEventListener("change", function () {
 users.push({ name: "Alice", media: "", type: "default", roomId: "r-demo-alice", messages: [] });
 users.push({ name: "Bob", media: "", type: "default", roomId: "r-demo-bob", messages: [] });
 renderUserList();
+
+const scrollDownBtn = document.getElementById("scrollDownBtn");
+const newMsgCount = document.getElementById("newMsgCount");
+let unreadMessages = 0;
+
+// Detect scroll
+chatMessages.addEventListener("scroll", () => {
+  const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
+  if (nearBottom) {
+    unreadMessages = 0;
+    newMsgCount.style.display = "none";
+    scrollDownBtn.style.display = "none";
+  }
+});
+
+// Show scroll button & counter when new message arrives
+function handleNewMessage() {
+  const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
+  if (nearBottom) {
+    chatMessages.scrollTo({
+  top: chatMessages.scrollHeight,
+  behavior: "smooth"
+});
+
+  } else {
+    unreadMessages++;
+    newMsgCount.textContent = unreadMessages;
+    newMsgCount.style.display = "block";
+    scrollDownBtn.style.display = "flex";
+  }
+}
+
+// Scroll down when button clicked
+scrollDownBtn.addEventListener("click", scrollToBottom);
+
+
+
+  // List of 100 emojis
+
+  const emojiCategories = {
+    faces: [
+      "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊",
+      "😋","😎","😍","😘","🥰","😗","😙","😚","🙂","🤗"
+    ],
+    animals: [
+      "🐵","🐶","🐺","🐱","🦁","🐯","🦊","🐻","🐼","🐨",
+      "🐷","🐸","🐵","🙈","🙉","🙊","🐔","🐧","🐦","🐤"
+    ],
+    food: [
+      "🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐",
+      "🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🥦"
+    ]
+  };
+
+  Object.keys(emojiCategories).forEach(cat => {
+    const container = document.getElementById(cat + "Category");
+    emojiCategories[cat].forEach(e => {
+      const btn = document.createElement("button");
+      btn.textContent = e;
+      btn.onclick = () => {
+        const input = document.getElementById("messageInput");
+        input.value += e;
+        input.focus();
+      };
+      container.appendChild(btn);
+    });
+  });
 </script>
+
+</script>
+
 </body>
 </html>
